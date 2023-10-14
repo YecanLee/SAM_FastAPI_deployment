@@ -1,4 +1,4 @@
-project_name
+Project in one word:
 ==============================
 
 a simple deployment of the segment anything model by using fastapi library in python
