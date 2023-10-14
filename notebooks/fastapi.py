@@ -3,19 +3,25 @@ from fastapi.responses import StreamingResponse
 from ultralytics import SAM, YOLO
 from PIL import Image
 import io
-import unicorn
+import uvicorn
 from enum import Enum
-import matplotlib.pyplot as plt
+from PIL import Image
+
 
 class Model_Name(str, Enum):
-    sam = 'Segment Anything Model'
-    yolov8 = "Yolov8 unfinetuned model"
-    transunet = "TransUNet model"
-    transunet_f = "TransUNet model with flatten attention mechanism"
+    sam = 'sam'
+    yolov8 = "yolov8"
+    transunet = "transunet"
+    transunet_f = "linear_transunet"
 
-class Model_Built(str, Enum):
-    sam = SAM(model = 'sam_b.pt')
-    yolov8 = YOLO(model = 'yolov8n.pt')
+# an utility function to load the model
+def load_model(model_name: str):
+    if model_name == 'sam':
+        return SAM(model='sam_b.pt')
+    elif model_name == 'yolov8':
+        return YOLO(model='yolov8n.pt')
+    else:
+        raise HTTPException(status_code=400, detail="Model not found LOSER")
 
 # Initialize the building of the application
 app = FastAPI()
@@ -28,19 +34,11 @@ async def main():
     return "Thank you for using our application, your service has been successfully started"
 
 @app.get("/model/{model_name}")
-async def get_model_name(model_name:Model_Name):
+async def get_model_name(model_name: Model_Name):
     """
     The user can get the model name they want to use for the task they would like to perform.
     """
-    if model_name is Model_Name.sam:
-        return {'Model Name': model_name, "message":"Segmentation model "}
-    if model_name is Model_Name.yolov8:
-        return {'Model Name': model_name, "message":"Object detection model"}
-    if model_name is Model_Name.transunet:
-        return {'Model Name': model_name, "message":"Segmentation model "}
-    if model_name is Model_Name.transunet_f:
-        return {'Model Name': model_name, "message":"Segmentation model "}
-    return {'Model Name': model_name, "message":"Model not found"}
+    return {'Model Name': model_name}
 
 # Build a app post method for choosing the model to use for different tasks
 @app.post("/model/{model_name}")
@@ -54,21 +52,22 @@ async def model_endpoint(model_name:Model_Name, file: UploadFile):
     image = Image.open(io.BytesIO(image_data))
 
     # Now you can use the 'model' object to run inference on the image
-    results = Model_Built[model_name](image)
-
-    # Show the results based on differrent tasks
-    # if we use SAM model, then the result will be directly shown
-    # if you use the yolov8 model, then the result needs to be show manually
-    if model_name is Model_Name.sam:
-        return plt.show()
-    if model_name is Model_Name.yolov8:
-        for r in results:
-            im_array = r.plot() 
-            im = Image.fromarray(im_array[..., ::-1])
-            im.show()
-            im.save('results.jpg')
-        return plt.show()
+    try:
+        model = load_model(model_name.value)
+    except HTTPException:
+        return {"Name Error": "Model not found LOSER"}
     
+    # Run model for different tasks
+    results = model(image)
+
+    # Visualize the results
+    for r in results:
+        result_image = r.plot()
+        im = Image.fromarray(result_image[..., ::-1])
+        im.show()
+        im.save('results.jpg')
+
+   
     # Convert the image array to a byte stream
     byte_io = io.BytesIO()
     im.save(byte_io, format='JPEG')
@@ -80,4 +79,4 @@ async def model_endpoint(model_name:Model_Name, file: UploadFile):
 
 
 if __name__ == "__main__":
-    unicorn.run(app, host = "0.0.0.0", port = 8000)
+    uvicorn.run(app, host = "0.0.0.0", port = 8000)
