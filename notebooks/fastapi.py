@@ -5,6 +5,7 @@ from PIL import Image
 import io
 import unicorn
 from enum import Enum
+import matplotlib.pyplot as plt
 
 class Model_Name(str, Enum):
     sam = 'Segment Anything Model'
@@ -55,30 +56,19 @@ async def model_endpoint(model_name:Model_Name, file: UploadFile):
     # Now you can use the 'model' object to run inference on the image
     results = Model_Built[model_name](image)
 
-    # Show the results
-    for r in results:
-        im_array = r.plot()
-
-@app.post("/detect_objects")
-async def segment_images_endpoint(file: UploadFile):
-    """
-    The user can upload the images they want to use for the segmentation task,
-    and get the result directly by using our application.
-    """
-    # Load the file into the memory
-    image_data = await file.read()
-    image = Image.open(io.BytesIO(image_data))
-
-    # Now you can use the 'model' object to run inference on the image
-    results = model(image)
-
-    # Show the results
-    for r in results:
-        im_array = r.plot()  # plot a BGR numpy array of predictions
-        im = Image.fromarray(im_array[..., ::-1])  # RGB PIL image
-        im.show()  # show image
-        im.save('results.jpg')  # save image
-
+    # Show the results based on differrent tasks
+    # if we use SAM model, then the result will be directly shown
+    # if you use the yolov8 model, then the result needs to be show manually
+    if model_name is Model_Name.sam:
+        return plt.show()
+    if model_name is Model_Name.yolov8:
+        for r in results:
+            im_array = r.plot() 
+            im = Image.fromarray(im_array[..., ::-1])
+            im.show()
+            im.save('results.jpg')
+        return plt.show()
+    
     # Convert the image array to a byte stream
     byte_io = io.BytesIO()
     im.save(byte_io, format='JPEG')
