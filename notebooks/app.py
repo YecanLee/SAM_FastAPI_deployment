@@ -8,9 +8,45 @@ import uvicorn
 from enum import Enum
 from PIL import Image
 import torch
-from transformers import SamModel, SamProcessor
+from transformers import SamModel, SamProcessor, SamImageProcessor
+from pydantic import BaseModel
+
+# This model needs to be imported from the notebooks folder, this is probably a weird bug but I havn't figured out how to fix it yet
+from notebooks.visualization_helper import (show_points_and_boxes_on_image, show_points_on_image, show_boxes_on_image, show_mask, show_points, show_box, visualize_segmentation)
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# pack the SAM model into a function
+def perform_segmentation(image, input_points):
+    """
+    The following function is defined based on the SAM official documentation.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
+    processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
+
+    inputs = processor(image, return_tensors="pt").to(device)
+    image_embeddings = model.get_image_embeddings(inputs["pixel_values"])
+
+    inputs = processor(image, input_points=input_points, return_tensors="pt").to(device)
+    # pop the pixel_values as they are not needed
+    inputs.pop("pixel_values", None)
+    inputs.update({"image_embeddings": image_embeddings})
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+
+    masks = processor.image_processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped"])
+
+    scores = outputs.iou_scores
+    return masks, scores
+
+
+def perform_sam(image, input_points):
+    masks, scores = perform_segmentation(image, input_points)
+    sam_result = visualize_segmentation(image, masks[0])
+    return sam_result
 
 
 class Model_Name(str, Enum):
@@ -19,6 +55,15 @@ class Model_Name(str, Enum):
     transunet = "transunet"
     transunet_f = "linear_transunet"
     sam_hf = "sam_hf"
+
+
+class SegmentRequest(BaseModel):
+    """
+    The result should be a list of points, each point is a list of two numbers,
+    representing the x and y coordinates of the point.
+    """
+    input_points: list[list[float]]
+
 
 # an utility function to load the model
 def load_model(model_name: str):
@@ -30,6 +75,7 @@ def load_model(model_name: str):
         return SamModel.from_pretrained('facebook/sam-vit-huge').to(device)
     else:
         raise HTTPException(status_code=400, detail="Model not found LOSER")
+    
 
 # Initialize the building of the application
 app = FastAPI()
@@ -41,12 +87,14 @@ async def main():
     """
     return "Thank you for using our application, your service has been successfully started"
 
+
 @app.get("/model/{model_name}")
 async def get_model_name(model_name: Model_Name):
     """
     The user can get the model name they want to use for the task they would like to perform.
     """
     return {'Model Name': model_name}
+
 
 # visualize the input image first 
 @app.post("/image")
@@ -73,11 +121,9 @@ async def image_endpoint(file: UploadFile):
     return StreamingResponse(byte_io, media_type="image/jpeg")
 
 
-
-
 # Build a app post method for choosing the model to use for different tasks
 @app.post("/model/{model_name}")
-async def model_endpoint(model_name:Model_Name, file: UploadFile):
+async def model_endpoint(model_name:Model_Name, file: UploadFile, segment_request:SegmentRequest):
     """
     The user can upload the images they want to use for the task they would like to use,
     and get the result directly by using our application.
@@ -86,9 +132,12 @@ async def model_endpoint(model_name:Model_Name, file: UploadFile):
     image_data = await file.read()
     image = Image.open(io.BytesIO(image_data))
 
+    input_points = segment_request.input_points
+
     # Now you can use the 'model' object to run inference on the image
+    
     try:
-        model = load_model(model_name.value)
+        model = load_model(model_name)  
     except HTTPException:
         return {"Name Error": "Model not found LOSER"}
     
