@@ -10,12 +10,25 @@ from PIL import Image
 import torch
 from transformers import SamModel, SamProcessor, SamImageProcessor
 from pydantic import BaseModel
+from PIL import Image
 
 # This model needs to be imported from the notebooks folder, this is probably a weird bug but I havn't figured out how to fix it yet
 from notebooks.visualization_helper import (show_points_and_boxes_on_image, show_points_on_image, show_boxes_on_image, show_mask, show_points, show_box, visualize_segmentation)
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# an utility function to load the model
+def load_model(model_name: str):
+    if model_name == 'sam':
+        return SAM(model='sam_b.pt')
+    elif model_name == 'yolov8':
+        return YOLO(model='yolov8n.pt')
+    elif model_name == 'sam_hf':
+        return SamModel.from_pretrained('facebook/sam-vit-huge').to(device)
+    else:
+        raise HTTPException(status_code=400, detail="Model not found LOSER")
+    
 
 # pack the SAM model into a function
 def perform_segmentation(image, input_points):
@@ -45,8 +58,30 @@ def perform_segmentation(image, input_points):
 
 def perform_sam(image, input_points):
     masks, scores = perform_segmentation(image, input_points)
-    sam_result = visualize_segmentation(image, masks[0])
-    return sam_result
+    byte_io = visualize_segmentation(image, masks[0])
+    return byte_io
+
+
+def perform_none_sam(image, model_name):
+    model = load_model(model_name)
+    results = model(image)
+    im = Image.fromarray(results[..., ::-1])
+    im.show()
+    # Convert the image array to a byte stream
+    byte_io = io.BytesIO()
+    im.save(byte_io, format='JPEG')
+
+    # Seek to the beginning of the byte stream
+    byte_io.seek(0)
+
+    return byte_io
+
+model_name_dictionaly = {
+    "sam": perform_none_sam,
+    "yolov8": perform_none_sam,
+    # "transunet": perform_none_sam,
+    "sam_hf": perform_sam,
+}
 
 
 class Model_Name(str, Enum):
@@ -64,18 +99,6 @@ class SegmentRequest(BaseModel):
     """
     input_points: list[list[float]]
 
-
-# an utility function to load the model
-def load_model(model_name: str):
-    if model_name == 'sam':
-        return SAM(model='sam_b.pt')
-    elif model_name == 'yolov8':
-        return YOLO(model='yolov8n.pt')
-    elif model_name == 'sam_hf':
-        return SamModel.from_pretrained('facebook/sam-vit-huge').to(device)
-    else:
-        raise HTTPException(status_code=400, detail="Model not found LOSER")
-    
 
 # Initialize the building of the application
 app = FastAPI()
@@ -110,7 +133,6 @@ async def image_endpoint(file: UploadFile):
     # Visualize the input
     plt.imshow(raw_image)
 
-
     # Convert the image array to a byte stream
     byte_io = io.BytesIO()
     raw_image.save(byte_io, format='JPEG')
@@ -132,7 +154,14 @@ async def model_endpoint(model_name:Model_Name, file: UploadFile, segment_reques
     image_data = await file.read()
     image = Image.open(io.BytesIO(image_data))
 
-    input_points = segment_request.input_points
+    handler = model_name_dictionaly.get(model_name)
+    if handler is None:
+        raise HTTPException(status_code=400, detail=f"Unsupported model: {model_name}")
+    if model_name == "sam_hf":
+        byte_io = handler(image, segment_request.input_points)
+    else:
+        byte_io = handler(image, model_name)
+
 
     # Now you can use the 'model' object to run inference on the image
     
