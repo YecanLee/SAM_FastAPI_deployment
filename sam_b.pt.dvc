@@ -1,0 +1,5 @@
+outs:
+- md5: 01ec64d29a2fca3f0661936605ae66f8
+  size: 375042383
+  hash: md5
+  path: sam_b.pt
