@@ -87,3 +87,5 @@ target/
 
 # Mypy cache
 .mypy_cache/
+/sam_b.pt
+/yolov8n.pt

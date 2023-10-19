@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, HTTPException
+from fastapi import FastAPI, UploadFile, HTTPException, Body
 from fastapi.responses import StreamingResponse
 from ultralytics import SAM, YOLO
 from matplotlib import pyplot as plt
@@ -13,11 +13,12 @@ from pydantic import BaseModel
 from PIL import Image
 
 # This model needs to be imported from the notebooks folder, this is probably a weird bug but I havn't figured out how to fix it yet
-from notebooks.visualization_helper import (show_points_and_boxes_on_image, show_points_on_image, show_boxes_on_image, show_mask, show_points, show_box, visualize_segmentation)
-
+from visualization_helper import (show_points_and_boxes_on_image, show_points_on_image, show_boxes_on_image, show_mask, show_points, show_box, visualize_segmentation)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+
+## DEBUG REMEBER TO CHANGE THE PATH FILE INTO A RELATIVE ONE!
 # an utility function to load the model
 def load_model(model_name: str):
     if model_name == 'sam':
@@ -58,7 +59,7 @@ def perform_segmentation(image, input_points):
 
 def perform_sam(image, input_points):
     masks, scores = perform_segmentation(image, input_points)
-    byte_io = visualize_segmentation(image, masks[0])
+    byte_io = visualize_segmentation(image, masks[0], scores[0])
     return byte_io
 
 
@@ -92,12 +93,13 @@ class Model_Name(str, Enum):
     sam_hf = "sam_hf"
 
 
+# DEBUG list[list]
 class SegmentRequest(BaseModel):
     """
     The result should be a list of points, each point is a list of two numbers,
     representing the x and y coordinates of the point.
     """
-    input_points: list[list[float]]
+    input_points: list[float]
 
 
 # Initialize the building of the application
@@ -144,8 +146,9 @@ async def image_endpoint(file: UploadFile):
 
 
 # Build a app post method for choosing the model to use for different tasks
+# using self-selected models besides the SAM offered by huggingface
 @app.post("/model/{model_name}")
-async def model_endpoint(model_name:Model_Name, file: UploadFile, segment_request:SegmentRequest):
+async def model_endpoint(model_name:Model_Name, file: UploadFile, segment_request:SegmentRequest = Body(...)):
     """
     The user can upload the images they want to use for the task they would like to use,
     and get the result directly by using our application.
@@ -154,41 +157,16 @@ async def model_endpoint(model_name:Model_Name, file: UploadFile, segment_reques
     image_data = await file.read()
     image = Image.open(io.BytesIO(image_data))
 
-    handler = model_name_dictionaly.get(model_name)
+    handler = model_name_dictionaly.get(model_name.value)
     if handler is None:
         raise HTTPException(status_code=400, detail=f"Unsupported model: {model_name}")
     if model_name == "sam_hf":
         byte_io = handler(image, segment_request.input_points)
     else:
         byte_io = handler(image, model_name)
-
-
-    # Now you can use the 'model' object to run inference on the image
-    
-    try:
-        model = load_model(model_name)  
-    except HTTPException:
-        return {"Name Error": "Model not found LOSER"}
-    
-    # Run model for different tasks
-    results = model(image)
-
-    # Visualize the results
-    for r in results:
-        result_image = r.plot()
-        im = Image.fromarray(result_image[..., ::-1])
-        im.show()
-        # im.save('results.jpg')
-
-   
-    # Convert the image array to a byte stream
-    byte_io = io.BytesIO()
-    im.save(byte_io, format='JPEG')
-
-    # Seek to the beginning of the byte stream
-    byte_io.seek(0)
-
     return StreamingResponse(byte_io, media_type="image/jpeg")
+
+### TO DO CHANGE THE APP POST, BUILD A NEW APP POST FOR THE SAM MODEL
 
 
 if __name__ == "__main__":
