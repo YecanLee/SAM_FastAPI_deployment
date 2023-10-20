@@ -1,0 +1,52 @@
+{
+    "os": "Windows-10-10.0.22621-SP0",
+    "python": "3.11.0",
+    "heartbeatAt": "2023-10-20T08:44:31.854231",
+    "startedAt": "2023-10-20T08:44:31.353139",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "<python with no main file>",
+    "codePathLocal": null,
+    "git": {
+        "remote": "https://github.com/YecanLee/SAM_FastAPI_deployment",
+        "commit": "fa7bb2593dbf7178994ef49aa6f8f202b3d40cb9"
+    },
+    "email": null,
+    "root": "C:/Users/ra78lof/SAM_FastAPI_deployment",
+    "host": "LMMISTA-CIP-206",
+    "username": "ra78lof",
+    "executable": "C:\\Users\\ra78lof\\AppData\\Local\\anaconda3\\envs\\msa\\python.exe",
+    "cpu_count": 12,
+    "cpu_count_logical": 20,
+    "cpu_freq": {
+        "current": 2100.0,
+        "min": 0.0,
+        "max": 2100.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2100.0,
+            "min": 0.0,
+            "max": 2100.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 476.02050399780273,
+            "used": 152.80545043945312
+        }
+    },
+    "gpu": "NVIDIA GeForce RTX 3060",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce RTX 3060",
+            "memory_total": 12884901888
+        }
+    ],
+    "memory": {
+        "total": 63.67731475830078
+    }
+}
